@@ -17,6 +17,7 @@ import type {
 import {
   type FileChangeEvent,
   type ProcessStateEvent,
+  type SessionMetadataChangedEvent,
   type SessionStatusEvent,
   type SessionUpdatedEvent,
   useFileActivity,
@@ -567,11 +568,29 @@ export function useSession(
     }
   }, [projectId, sessionId, fetchNewMessages]);
 
+  const handleSessionMetadataChange = useCallback(
+    (event: SessionMetadataChangedEvent) => {
+      if (event.sessionId !== sessionId) return;
+      setSession((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          ...(event.title !== undefined && { customTitle: event.title }),
+          ...(event.archived !== undefined && { isArchived: event.archived }),
+          ...(event.starred !== undefined && { isStarred: event.starred }),
+        };
+      });
+      fetchSessionMetadata();
+    },
+    [sessionId, fetchSessionMetadata, setSession],
+  );
+
   useFileActivity({
     onSessionStatusChange: handleSessionStatusChange,
     onFileChange: handleFileChange,
     onSessionUpdated: handleSessionUpdated,
     onProcessStateChange: handleProcessStateChange,
+    onSessionMetadataChange: handleSessionMetadataChange,
     onReconnect: handleActivityReconnect,
   });
 
