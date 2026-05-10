@@ -146,6 +146,8 @@
   "newSessionThinkingMode": "思考模式：{mode}",
   "newSessionStartAction": "开始会话",
   "newSessionRemoveFile": "移除 {name}",
+  "newSessionCustomTitleLabel": "标题（可选）",
+  "newSessionCustomTitlePlaceholder": "为此会话命名",
   "newSessionHeaderTitle": "开始新会话",
   "newSessionHeaderSubtitle": "你想处理什么任务？",
   "newSessionDefaultsDescription": "将当前的提供商、模型和权限模式保存为默认值。",

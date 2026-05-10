@@ -102,9 +102,11 @@ export function NewSessionForm({
   const { t } = useI18n();
   const navigate = useNavigate();
   const basePath = useRemoteBasePath();
+  const titleInputId = `new-session-title-${projectId}`;
   const [message, setMessage, draftControls] = useDraftPersistence(
     `draft-new-session-${projectId}`,
   );
+  const [title, setTitle] = useState("");
   const [mode, setMode] = useState<PermissionMode>("default");
   const [selectedProvider, setSelectedProvider] = useState<ProviderName | null>(
     null,
@@ -377,6 +379,7 @@ export function NewSessionForm({
         model: selectedModel ?? undefined,
         thinking,
         provider: selectedProvider ?? undefined,
+        title: trimmedTitle || undefined,
         executor: selectedExecutor ?? undefined,
       };
 
@@ -454,7 +457,7 @@ export function NewSessionForm({
       navigate(`${basePath}/projects/${projectId}/sessions/${sessionId}`, {
         state: {
           initialStatus: { state: "owned", processId },
-          initialTitle: trimmedMessage,
+          initialTitle: trimmedTitle || trimmedMessage,
           initialModel: selectedModel,
           initialProvider: selectedProvider,
         },
@@ -575,6 +578,7 @@ export function NewSessionForm({
   }, []);
 
   const hasContent = message.trim() || pendingFiles.length > 0;
+  const trimmedTitle = title.trim();
   const savedDefaults = settings?.newSessionDefaults;
   const defaultsMatchCurrent =
     (savedDefaults?.provider ?? undefined) ===
@@ -585,6 +589,20 @@ export function NewSessionForm({
   // Shared input area with toolbar (textarea + attach/voice on left, send on right)
   const inputArea = (
     <>
+      <div className="new-session-title-field">
+        <label className="new-session-title-label" htmlFor={titleInputId}>
+          {t("newSessionCustomTitleLabel")}
+        </label>
+        <input
+          id={titleInputId}
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={t("newSessionCustomTitlePlaceholder")}
+          disabled={isStarting}
+          className="new-session-title-input"
+        />
+      </div>
       <textarea
         ref={textareaRef}
         value={displayText}

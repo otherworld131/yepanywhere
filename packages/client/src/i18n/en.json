@@ -146,6 +146,8 @@
   "newSessionThinkingMode": "Thinking mode: {mode}",
   "newSessionStartAction": "Start session",
   "newSessionRemoveFile": "Remove {name}",
+  "newSessionCustomTitleLabel": "Title (optional)",
+  "newSessionCustomTitlePlaceholder": "Name this session",
   "newSessionHeaderTitle": "Start a New Session",
   "newSessionHeaderSubtitle": "What would you like to work on?",
   "newSessionDefaultsDescription": "Save the current provider, model, and permission mode as your defaults.",
