@@ -146,6 +146,8 @@
   "newSessionThinkingMode": "Mode de réflexion : {mode}",
   "newSessionStartAction": "Démarrer la session",
   "newSessionRemoveFile": "Supprimer {name}",
+  "newSessionCustomTitleLabel": "Titre (facultatif)",
+  "newSessionCustomTitlePlaceholder": "Nommer cette session",
   "newSessionHeaderTitle": "Démarrer une nouvelle session",
   "newSessionHeaderSubtitle": "Sur quoi souhaitez-vous travailler ?",
   "newSessionDefaultsDescription": "Enregistrer le fournisseur, le modèle et le mode d'autorisation actuels comme valeurs par défaut.",

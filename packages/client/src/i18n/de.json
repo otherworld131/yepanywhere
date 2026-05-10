@@ -146,6 +146,8 @@
   "newSessionThinkingMode": "Denkmodus: {mode}",
   "newSessionStartAction": "Sitzung starten",
   "newSessionRemoveFile": "{name} entfernen",
+  "newSessionCustomTitleLabel": "Titel (optional)",
+  "newSessionCustomTitlePlaceholder": "Diese Sitzung benennen",
   "newSessionHeaderTitle": "Neue Sitzung starten",
   "newSessionHeaderSubtitle": "Woran möchtest du arbeiten?",
   "newSessionDefaultsDescription": "Speichere den aktuellen Anbieter, das Modell und den Berechtigungsmodus als Standard.",

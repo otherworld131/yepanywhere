@@ -122,6 +122,7 @@ interface StartSessionBody {
   images?: string[];
   documents?: string[];
   attachments?: UploadedFile[];
+  title?: string;
   mode?: PermissionMode;
   model?: ModelOption;
   thinking?: ThinkingOption;
@@ -135,6 +136,7 @@ interface StartSessionBody {
 }
 
 interface CreateSessionBody {
+  title?: string;
   mode?: PermissionMode;
   model?: ModelOption;
   thinking?: ThinkingOption;
@@ -349,6 +351,23 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
           projectPath,
         })
       : null);
+
+  async function persistInitialCustomTitle(
+    sessionId: string,
+    title: string | undefined,
+  ): Promise<void> {
+    const trimmedTitle = title?.trim();
+    if (!deps.sessionMetadataService || !trimmedTitle) return;
+
+    await deps.sessionMetadataService.setTitle(sessionId, trimmedTitle);
+
+    deps.eventBus?.emit({
+      type: "session-metadata-changed",
+      sessionId,
+      title: trimmedTitle,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   // GET /api/projects/:projectId/sessions/:sessionId/agents - Get agent mappings
   // Used to find agent sessions for pending Tasks on page reload
@@ -888,6 +907,7 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
         );
       }
     }
+    await persistInitialCustomTitle(result.sessionId, body.title);
 
     return c.json({
       sessionId: result.sessionId,
@@ -981,6 +1001,7 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
         );
       }
     }
+    await persistInitialCustomTitle(result.sessionId, body.title);
 
     return c.json({
       sessionId: result.sessionId,
