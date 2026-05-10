@@ -368,6 +368,13 @@ export function Sidebar({
               basePath={basePath}
             />
             <SidebarNavItem
+              to="/workspace"
+              icon={SidebarIcons.workspace}
+              label={t("sidebarWorkspace")}
+              onClick={onNavigate}
+              basePath={basePath}
+            />
+            <SidebarNavItem
               to="/projects"
               icon={SidebarIcons.projects}
               label={t("sidebarProjects")}
@@ -464,6 +471,11 @@ export function Sidebar({
                       basePath={basePath}
                       messageCount={session.messageCount}
                       hasDraft={drafts.has(session.id)}
+                      dragPayload={{
+                        sessionId: session.id,
+                        projectId: session.projectId,
+                        title: getSessionDisplayTitle(session),
+                      }}
                     />
                   ))}
               </ul>
@@ -518,6 +530,11 @@ export function Sidebar({
                       basePath={basePath}
                       messageCount={session.messageCount}
                       hasDraft={drafts.has(session.id)}
+                      dragPayload={{
+                        sessionId: session.id,
+                        projectId: session.projectId,
+                        title: getSessionDisplayTitle(session),
+                      }}
                     />
                   ))}
               </ul>
@@ -570,6 +587,11 @@ export function Sidebar({
                     basePath={basePath}
                     messageCount={session.messageCount}
                     hasDraft={drafts.has(session.id)}
+                    dragPayload={{
+                      sessionId: session.id,
+                      projectId: session.projectId,
+                      title: getSessionDisplayTitle(session),
+                    }}
                   />
                 ))}
               </ul>

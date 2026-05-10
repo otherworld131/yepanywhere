@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { AgentActivity } from "../hooks/useFileActivity";
+import type { SessionDragPayload } from "../lib/workspaceDrag";
+import { setSessionDragData } from "../lib/workspaceDrag";
 import type {
   ContextUsage,
   PendingInputType,
@@ -65,6 +67,8 @@ interface SessionListItemProps {
 
   /** Number of messages in session (0 indicates brand new session) */
   messageCount?: number;
+  /** Optional drag payload used by workspace assignment */
+  dragPayload?: SessionDragPayload;
 }
 
 /**
@@ -123,6 +127,7 @@ export function SessionListItem({
   basePath = "",
   // New session detection
   messageCount,
+  dragPayload,
 }: SessionListItemProps) {
   const navigate = useNavigate();
 
@@ -338,7 +343,17 @@ export function SessionListItem({
   );
 
   return (
-    <li className={liClasses}>
+    <li
+      className={liClasses}
+      draggable={!!dragPayload}
+      onDragStart={
+        dragPayload
+          ? (event) => {
+              setSessionDragData(event, dragPayload);
+            }
+          : undefined
+      }
+    >
       {/* Checkbox for multi-select (only shown when onSelect is provided) */}
       {onSelect && (
         <input
@@ -372,7 +387,7 @@ export function SessionListItem({
             onNavigate?.();
           }}
           title={fullTitle || displayTitle}
-          className="session-list-item__link"
+          className={`session-list-item__link ${dragPayload ? "session-list-item__link--draggable" : ""}`}
         >
           {mode === "card" ? (
             // Card mode: title on one line, meta on second line

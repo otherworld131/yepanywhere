@@ -45,6 +45,7 @@ import { ProjectsPage } from "./pages/ProjectsPage";
 import { RelayConnectionGate } from "./pages/RelayConnectionGate";
 import { RelayLoginPage } from "./pages/RelayLoginPage";
 import { SessionPage } from "./pages/SessionPage";
+import { WorkspacePage } from "./pages/WorkspacePage";
 import { SettingsLayout } from "./pages/settings";
 import "./styles/index.css";
 
@@ -70,6 +71,7 @@ const APP_ROUTES = (
     <Route element={<NavigationLayout />}>
       <Route path="projects" element={<ProjectsPage />} />
       <Route path="sessions" element={<GlobalSessionsPage />} />
+      <Route path="workspace" element={<WorkspacePage />} />
       <Route path="agents" element={<AgentsPage />} />
       <Route path="inbox" element={<InboxPage />} />
       <Route path="git-status" element={<GitStatusPage />} />
