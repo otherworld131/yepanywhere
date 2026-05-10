@@ -139,6 +139,10 @@ export function SessionListItem({
   const [localTitle, setLocalTitle] = useState<string | undefined>(undefined);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const isSavingRef = useRef(false);
+  const previousTitlePropRef = useRef(title);
+  const previousStarredPropRef = useRef(isStarredProp);
+  const previousArchivedPropRef = useRef(isArchivedProp);
+  const previousHasUnreadPropRef = useRef(hasUnreadProp);
 
   // Computed values with optimistic fallback
   const isStarred = localIsStarred ?? isStarredProp;
@@ -162,11 +166,48 @@ export function SessionListItem({
     }
   }, [isEditing]);
 
+  useEffect(() => {
+    if (localTitle !== undefined && title !== previousTitlePropRef.current) {
+      setLocalTitle(undefined);
+    }
+    previousTitlePropRef.current = title;
+  }, [title, localTitle]);
+
   // Local state for optimistic unread toggle
   const [localHasUnread, setLocalHasUnread] = useState<boolean | undefined>(
     undefined,
   );
   const hasUnread = localHasUnread ?? hasUnreadProp;
+
+  useEffect(() => {
+    if (
+      localIsStarred !== undefined &&
+      isStarredProp !== previousStarredPropRef.current
+    ) {
+      setLocalIsStarred(undefined);
+    }
+    previousStarredPropRef.current = isStarredProp;
+  }, [isStarredProp, localIsStarred]);
+
+  useEffect(() => {
+    if (
+      localIsArchived !== undefined &&
+      isArchivedProp !== previousArchivedPropRef.current
+    ) {
+      setLocalIsArchived(undefined);
+    }
+    previousArchivedPropRef.current = isArchivedProp;
+  }, [isArchivedProp, localIsArchived]);
+
+  useEffect(() => {
+    if (
+      localHasUnread !== undefined &&
+      hasUnreadProp !== previousHasUnreadPropRef.current
+    ) {
+      setLocalHasUnread(undefined);
+    }
+    previousHasUnreadPropRef.current = hasUnreadProp;
+  }, [hasUnreadProp, localHasUnread]);
 
   // Handlers for menu actions
   const handleToggleStar = async () => {

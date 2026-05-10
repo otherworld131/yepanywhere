@@ -245,6 +245,10 @@ function SessionPageContent({
   const [localHasUnread, setLocalHasUnread] = useState<boolean | undefined>(
     undefined,
   );
+  const previousCustomTitleRef = useRef(session?.customTitle);
+  const previousArchivedRef = useRef(session?.isArchived);
+  const previousStarredRef = useRef(session?.isStarred);
+  const previousHasUnreadRef = useRef(session?.hasUnread);
 
   // Reset local metadata state when sessionId changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset on sessionId change
@@ -254,6 +258,46 @@ function SessionPageContent({
     setLocalIsStarred(undefined);
     setLocalHasUnread(undefined);
   }, [sessionId]);
+
+  useEffect(() => {
+    if (
+      localCustomTitle !== undefined &&
+      session?.customTitle !== previousCustomTitleRef.current
+    ) {
+      setLocalCustomTitle(undefined);
+    }
+    previousCustomTitleRef.current = session?.customTitle;
+  }, [session?.customTitle, localCustomTitle]);
+
+  useEffect(() => {
+    if (
+      localIsArchived !== undefined &&
+      session?.isArchived !== previousArchivedRef.current
+    ) {
+      setLocalIsArchived(undefined);
+    }
+    previousArchivedRef.current = session?.isArchived;
+  }, [session?.isArchived, localIsArchived]);
+
+  useEffect(() => {
+    if (
+      localIsStarred !== undefined &&
+      session?.isStarred !== previousStarredRef.current
+    ) {
+      setLocalIsStarred(undefined);
+    }
+    previousStarredRef.current = session?.isStarred;
+  }, [session?.isStarred, localIsStarred]);
+
+  useEffect(() => {
+    if (
+      localHasUnread !== undefined &&
+      session?.hasUnread !== previousHasUnreadRef.current
+    ) {
+      setLocalHasUnread(undefined);
+    }
+    previousHasUnreadRef.current = session?.hasUnread;
+  }, [session?.hasUnread, localHasUnread]);
 
   // Record session visit for recents tracking
   useEffect(() => {
