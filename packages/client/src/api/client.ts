@@ -120,6 +120,8 @@ export interface SessionOptions {
   model?: string;
   thinking?: ThinkingOption;
   provider?: ProviderName;
+  /** Optional custom title to assign on session creation */
+  title?: string;
   /** SSH host alias for remote execution (undefined = local) */
   executor?: string;
 }
@@ -444,6 +446,7 @@ export const api = {
         model: options?.model,
         thinking: options?.thinking,
         provider: options?.provider,
+        title: options?.title,
         executor: options?.executor,
         attachments,
       }),
@@ -466,6 +469,7 @@ export const api = {
         model: options?.model,
         thinking: options?.thinking,
         provider: options?.provider,
+        title: options?.title,
         executor: options?.executor,
       }),
     }),

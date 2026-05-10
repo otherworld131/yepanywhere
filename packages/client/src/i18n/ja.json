@@ -146,6 +146,8 @@
   "newSessionThinkingMode": "Thinking モード: {mode}",
   "newSessionStartAction": "セッションを開始",
   "newSessionRemoveFile": "{name} を削除",
+  "newSessionCustomTitleLabel": "タイトル（任意）",
+  "newSessionCustomTitlePlaceholder": "このセッションに名前を付ける",
   "newSessionHeaderTitle": "新しいセッションを開始",
   "newSessionHeaderSubtitle": "何に取り組みますか？",
   "newSessionDefaultsDescription": "現在のプロバイダー、モデル、権限モードをデフォルトとして保存します。",

@@ -230,4 +230,114 @@ describe("Sessions metadata route", () => {
       }),
     );
   });
+
+  it("persists and broadcasts custom title on direct session start", async () => {
+    const project = createProject();
+    const startSession = vi.fn(async () => ({
+      id: "proc-1",
+      sessionId: "sess-1",
+      permissionMode: "default",
+      modeVersion: 0,
+    }));
+    const setTitle = vi.fn(async () => {});
+    const emit = vi.fn();
+
+    const routes = createSessionsRoutes({
+      supervisor: {
+        startSession,
+      } as unknown as SessionsDeps["supervisor"],
+      scanner: {
+        getOrCreateProject: vi.fn(async () => project),
+      } as unknown as SessionsDeps["scanner"],
+      readerFactory: vi.fn(
+        () =>
+          ({
+            getSessionSummary: vi.fn(async () => null),
+          }) as unknown as ISessionReader,
+      ),
+      sessionMetadataService: {
+        setTitle,
+        setProvider: vi.fn(async () => {}),
+        setExecutor: vi.fn(async () => {}),
+      } as unknown as NonNullable<SessionsDeps["sessionMetadataService"]>,
+      eventBus: {
+        emit,
+      } as unknown as NonNullable<SessionsDeps["eventBus"]>,
+    });
+
+    const response = await routes.request(`/projects/${project.id}/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Ship the feature",
+        title: "Feature kickoff",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(setTitle).toHaveBeenCalledWith("sess-1", "Feature kickoff");
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "session-metadata-changed",
+        sessionId: "sess-1",
+        title: "Feature kickoff",
+      }),
+    );
+  });
+
+  it("persists and broadcasts custom title on create-only session flow", async () => {
+    const project = createProject();
+    const createSession = vi.fn(async () => ({
+      id: "proc-1",
+      sessionId: "sess-1",
+      permissionMode: "default",
+      modeVersion: 0,
+    }));
+    const setTitle = vi.fn(async () => {});
+    const emit = vi.fn();
+
+    const routes = createSessionsRoutes({
+      supervisor: {
+        createSession,
+      } as unknown as SessionsDeps["supervisor"],
+      scanner: {
+        getOrCreateProject: vi.fn(async () => project),
+      } as unknown as SessionsDeps["scanner"],
+      readerFactory: vi.fn(
+        () =>
+          ({
+            getSessionSummary: vi.fn(async () => null),
+          }) as unknown as ISessionReader,
+      ),
+      sessionMetadataService: {
+        setTitle,
+        setProvider: vi.fn(async () => {}),
+        setExecutor: vi.fn(async () => {}),
+      } as unknown as NonNullable<SessionsDeps["sessionMetadataService"]>,
+      eventBus: {
+        emit,
+      } as unknown as NonNullable<SessionsDeps["eventBus"]>,
+    });
+
+    const response = await routes.request(
+      `/projects/${project.id}/sessions/create`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Uploads first",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(setTitle).toHaveBeenCalledWith("sess-1", "Uploads first");
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "session-metadata-changed",
+        sessionId: "sess-1",
+        title: "Uploads first",
+      }),
+    );
+  });
 });
