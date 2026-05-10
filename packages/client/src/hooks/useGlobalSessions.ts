@@ -321,8 +321,13 @@ export function useGlobalSessions(options: UseGlobalSessionsOptions = {}) {
 
         return updated;
       });
+
+      // Metadata changes can move sessions into or out of filtered queries
+      // (for example, starring from the session page should move the row into
+      // the sidebar's dedicated starred list). Refetch to reconcile membership.
+      debouncedRefetch();
     },
-    [starred],
+    [starred, debouncedRefetch],
   );
 
   // Handle session seen events
