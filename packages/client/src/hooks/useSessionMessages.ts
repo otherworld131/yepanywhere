@@ -89,8 +89,29 @@ export interface UseSessionMessagesResult {
   loadOlderMessages: () => Promise<void>;
 }
 
+type SessionResponse = Awaited<ReturnType<typeof api.getSession>>;
+
 function isCodexProvider(provider?: string): boolean {
   return provider === "codex" || provider === "codex-oss";
+}
+
+function getLastPersistedMessageId(messages: Message[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message) {
+      continue;
+    }
+    if ((message._source ?? "sdk") !== "jsonl") {
+      continue;
+    }
+
+    const messageId = getMessageId(message);
+    if (messageId) {
+      return messageId;
+    }
+  }
+
+  return undefined;
 }
 
 function getMessageRole(message: Message): string {
@@ -176,6 +197,11 @@ export function useSessionMessages(
     >
   >([]);
   const initialLoadCompleteRef = useRef(false);
+  const initialLoadPromiseRef = useRef<Promise<void> | null>(null);
+  const inFlightSessionRequestRef = useRef<{
+    key: string;
+    promise: Promise<SessionResponse>;
+  } | null>(null);
 
   // Track provider for DAG ordering decisions
   const providerRef = useRef<string | undefined>(undefined);
@@ -199,14 +225,6 @@ export function useSessionMessages(
     },
     [],
   );
-
-  // Update lastMessageIdRef when messages change
-  useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage) {
-      lastMessageIdRef.current = getMessageId(lastMessage);
-    }
-  }, [messages]);
 
   // Process a stream message event.
   // When replaying buffered startup events for Codex, suppress entries that are
@@ -286,6 +304,40 @@ export function useSessionMessages(
     }
   }, [processStreamMessage, processStreamSubagentMessage]);
 
+  const requestSession = useCallback(
+    (
+      afterMessageId?: string,
+      requestOptions?: { tailCompactions?: number; beforeMessageId?: string },
+    ) => {
+      const requestKey = JSON.stringify({
+        afterMessageId: afterMessageId ?? null,
+        tailCompactions: requestOptions?.tailCompactions ?? null,
+        beforeMessageId: requestOptions?.beforeMessageId ?? null,
+      });
+
+      const inFlightRequest = inFlightSessionRequestRef.current;
+      if (inFlightRequest?.key === requestKey) {
+        return inFlightRequest.promise;
+      }
+
+      const promise = api
+        .getSession(projectId, sessionId, afterMessageId, requestOptions)
+        .finally(() => {
+          const currentRequest = inFlightSessionRequestRef.current;
+          if (
+            currentRequest?.key === requestKey &&
+            currentRequest.promise === promise
+          ) {
+            inFlightSessionRequestRef.current = null;
+          }
+        });
+
+      inFlightSessionRequestRef.current = { key: requestKey, promise };
+      return promise;
+    },
+    [projectId, sessionId],
+  );
+
   // Initial load
   useEffect(() => {
     initialLoadCompleteRef.current = false;
@@ -293,10 +345,15 @@ export function useSessionMessages(
     maxPersistedTimestampMsRef.current = Number.NEGATIVE_INFINITY;
     setLoading(true);
     setAgentContent({});
+    let cancelled = false;
 
-    api
-      .getSession(projectId, sessionId, undefined, { tailCompactions: 2 })
+    const loadPromise = requestSession(undefined, {
+      tailCompactions: 2,
+    })
       .then((data) => {
+        if (cancelled) {
+          return;
+        }
         setSession(data.session);
         setPagination(data.pagination);
         providerRef.current = data.session.provider;
@@ -317,9 +374,9 @@ export function useSessionMessages(
         // stream "connected" event calls fetchNewMessages() immediately, but the
         // useEffect that normally updates lastMessageIdRef runs asynchronously.
         // Without this, fetchNewMessages() would use undefined and refetch everything.
-        const lastMessage = taggedMessages[taggedMessages.length - 1];
-        if (lastMessage) {
-          lastMessageIdRef.current = getMessageId(lastMessage);
+        const lastPersistedMessageId = getLastPersistedMessageId(taggedMessages);
+        if (lastPersistedMessageId) {
+          lastMessageIdRef.current = lastPersistedMessageId;
         }
 
         // Mark ready and flush buffer
@@ -337,15 +394,28 @@ export function useSessionMessages(
         });
       })
       .catch((err) => {
+        if (cancelled) {
+          return;
+        }
         setLoading(false);
         onLoadError?.(err);
       });
+
+    const trackedLoadPromise = loadPromise.finally(() => {
+      if (initialLoadPromiseRef.current === trackedLoadPromise) {
+        initialLoadPromiseRef.current = null;
+      }
+    });
+    initialLoadPromiseRef.current = trackedLoadPromise;
+
+    return () => {
+      cancelled = true;
+    };
   }, [
-    projectId,
-    sessionId,
     onLoadComplete,
     onLoadError,
     flushBuffer,
+    requestSession,
     updatePersistedTimestampWatermark,
   ]);
 
@@ -442,11 +512,12 @@ export function useSessionMessages(
   // Fetch new messages incrementally (for file change events)
   const fetchNewMessages = useCallback(async () => {
     try {
-      const data = await api.getSession(
-        projectId,
-        sessionId,
-        lastMessageIdRef.current,
-      );
+      const initialLoadPromise = initialLoadPromiseRef.current;
+      if (initialLoadPromise && !initialLoadCompleteRef.current) {
+        await initialLoadPromise;
+      }
+
+      const data = await requestSession(lastMessageIdRef.current);
       if (data.messages.length > 0) {
         updatePersistedTimestampWatermark(data.messages);
         setMessages((prev) => {
@@ -454,9 +525,15 @@ export function useSessionMessages(
             skipDagOrdering: !getProvider(data.session.provider).capabilities
               .supportsDag,
           });
-          return isCodexProvider(data.session.provider)
+          const mergedMessages = isCodexProvider(data.session.provider)
             ? reconcileCodexLinearMessages(result.messages)
             : result.messages;
+          const lastPersistedMessageId =
+            getLastPersistedMessageId(mergedMessages);
+          if (lastPersistedMessageId) {
+            lastMessageIdRef.current = lastPersistedMessageId;
+          }
+          return mergedMessages;
         });
       }
       // Update session metadata (including title, model, contextUsage) which may have changed
@@ -469,7 +546,7 @@ export function useSessionMessages(
     } catch {
       // Silent fail for incremental updates
     }
-  }, [projectId, sessionId, updatePersistedTimestampWatermark]);
+  }, [requestSession, updatePersistedTimestampWatermark]);
 
   // Load older messages (previous chunk before the current truncation point)
   const loadOlderMessages = useCallback(async () => {
@@ -478,7 +555,7 @@ export function useSessionMessages(
     }
     setLoadingOlder(true);
     try {
-      const data = await api.getSession(projectId, sessionId, undefined, {
+      const data = await requestSession(undefined, {
         tailCompactions: 2,
         beforeMessageId: pagination.truncatedBeforeMessageId,
       });
@@ -499,7 +576,7 @@ export function useSessionMessages(
     } finally {
       setLoadingOlder(false);
     }
-  }, [projectId, sessionId, pagination, updatePersistedTimestampWatermark]);
+  }, [pagination, requestSession, updatePersistedTimestampWatermark]);
 
   // Fetch session metadata only
   const fetchSessionMetadata = useCallback(async () => {

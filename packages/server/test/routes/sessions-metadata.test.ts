@@ -1,5 +1,6 @@
 import type { UrlProjectId } from "@yep-anywhere/shared";
 import { describe, expect, it, vi } from "vitest";
+import type { ISessionIndexService } from "../../src/indexes/types.js";
 import {
   type SessionsDeps,
   createSessionsRoutes,
@@ -122,6 +123,57 @@ describe("Sessions metadata route", () => {
 
     const json = await response.json();
     expect(json.session.provider).toBe("codex");
+  });
+
+  it("uses session index cache for metadata lookups when available", async () => {
+    const project = createProject();
+    const summary = createSummary();
+    const claudeReader = {
+      getSessionSummary: vi.fn(async () => null),
+    } as unknown as ISessionReader;
+    const codexReader = {
+      getSessionSummary: vi.fn(async () => summary),
+      getIndexScopeKey: vi.fn((sessionDir: string) => `codex::${sessionDir}`),
+    } as unknown as ISessionReader;
+    const getSessionsWithCache = vi.fn(
+      async (_sessionDir: string, _projectId: UrlProjectId, reader: object) =>
+        reader === codexReader ? [summary] : [],
+    );
+
+    const routes = createSessionsRoutes({
+      supervisor: {
+        getProcessForSession: vi.fn(() => null),
+      } as unknown as SessionsDeps["supervisor"],
+      scanner: {
+        getProject: vi.fn(async () => project),
+        getOrCreateProject: vi.fn(async () => project),
+      } as unknown as SessionsDeps["scanner"],
+      readerFactory: vi.fn(() => claudeReader),
+      sessionIndexService: {
+        initialize: vi.fn(),
+        getSessionsWithCache,
+        getSessionTitle: vi.fn(),
+        invalidateSession: vi.fn(),
+        clearCache: vi.fn(),
+      } as unknown as ISessionIndexService,
+      sessionMetadataService: {
+        getMetadata: vi.fn(() => undefined),
+        getProvider: vi.fn(() => "codex"),
+      } as unknown as NonNullable<SessionsDeps["sessionMetadataService"]>,
+      codexSessionsDir: "/tmp/codex-sessions",
+      codexReaderFactory: vi.fn(
+        () => codexReader as unknown as CodexSessionReader,
+      ),
+    });
+
+    const response = await routes.request(
+      `/projects/${project.id}/sessions/sess-1/metadata`,
+    );
+    expect(response.status).toBe(200);
+
+    expect(getSessionsWithCache).toHaveBeenCalled();
+    expect(vi.mocked(claudeReader.getSessionSummary)).not.toHaveBeenCalled();
+    expect(vi.mocked(codexReader.getSessionSummary)).not.toHaveBeenCalled();
   });
 
   it("prefers persisted provider over conflicting client resume provider", async () => {
