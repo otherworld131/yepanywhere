@@ -301,6 +301,9 @@ export function useSession(
     timer: ReturnType<typeof setTimeout> | null;
     pending: boolean;
   }>({ timer: null, pending: false });
+  const persistedCatchUpTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   // Add a message to the pending queue
   // Generates a tempId that will be sent to the server and echoed back in stream
@@ -445,6 +448,16 @@ export function useSession(
     }
   }, [fetchNewMessages]);
 
+  const schedulePersistedCatchUp = useCallback(() => {
+    if (persistedCatchUpTimerRef.current) {
+      clearTimeout(persistedCatchUpTimerRef.current);
+    }
+    persistedCatchUpTimerRef.current = setTimeout(() => {
+      persistedCatchUpTimerRef.current = null;
+      fetchNewMessages();
+    }, 150);
+  }, [fetchNewMessages]);
+
   // Handle file changes - for non-owned sessions only
   // For owned sessions, stream provides real-time messages and session-updated events
   // provide metadata (title, messageCount), so we don't need to poll the API
@@ -462,16 +475,15 @@ export function useSession(
         return;
       }
 
-      // For owned sessions: messages come via stream stream, metadata via session-updated event
-      // No API call needed - skip file change processing entirely
-      if (status.owner === "self") {
+      // For owned sessions: messages come via session stream, metadata via session-updated event.
+      // For non-owned sessions: the focused session-watch subscription handles refreshes.
+      // Avoid double-fetching the same session through both the global activity bus and
+      // the focused watch subscription.
+      if (status.owner === "self" && processState === "in-turn") {
         return;
       }
-
-      // For external/idle sessions: fetch both messages and metadata via API
-      throttledFetch();
     },
-    [sessionId, status.owner, throttledFetch],
+    [processState, sessionId, status.owner],
   );
 
   // Handle session content updates via stream (title, messageCount, updatedAt, contextUsage)
@@ -531,6 +543,7 @@ export function useSession(
       // If activity bus says waiting-input but we don't have the request,
       // fetch it via REST as a backup
       if (event.activity === "waiting-input" && event.pendingInputType) {
+        schedulePersistedCatchUp();
         setPendingInputRequest((current) => {
           if (current) return current; // Already have it, don't fetch
 
@@ -545,7 +558,7 @@ export function useSession(
         });
       }
     },
-    [projectId, sessionId],
+    [projectId, schedulePersistedCatchUp, sessionId],
   );
 
   // Handle activity bus reconnection (e.g., after phone screen wake).
@@ -601,6 +614,9 @@ export function useSession(
     return () => {
       if (throttleRef.current.timer) {
         clearTimeout(throttleRef.current.timer);
+      }
+      if (persistedCatchUpTimerRef.current) {
+        clearTimeout(persistedCatchUpTimerRef.current);
       }
     };
   }, []);
@@ -810,6 +826,7 @@ export function useSession(
         // Capture pending input request when waiting for user input
         if (statusData.state === "waiting-input" && statusData.request) {
           setPendingInputRequest(statusData.request);
+          schedulePersistedCatchUp();
           // Also update actualSessionId from request in case it differs from URL
           // This handles the temp→real ID transition when state-change arrives
           // after the connected event (which may have had the temp ID)
@@ -822,6 +839,9 @@ export function useSession(
         } else {
           // Clear pending request when state changes away from waiting-input
           setPendingInputRequest(null);
+          if (statusData.state === "idle") {
+            schedulePersistedCatchUp();
+          }
         }
       } else if (data.eventType === "deferred-queue") {
         const deferredData = data as {
@@ -830,6 +850,7 @@ export function useSession(
         };
         setDeferredMessages(deferredData.messages ?? []);
       } else if (data.eventType === "complete") {
+        schedulePersistedCatchUp();
         setProcessState("idle");
         setStatus({ owner: "none" });
         setPendingInputRequest(null);
@@ -871,8 +892,12 @@ export function useSession(
         // (handles reconnection after another tab already approved/denied)
         if (connectedData.state === "waiting-input" && connectedData.request) {
           setPendingInputRequest(connectedData.request);
+          schedulePersistedCatchUp();
         } else {
           setPendingInputRequest(null);
+          if (connectedData.state === "idle") {
+            schedulePersistedCatchUp();
+          }
         }
         if (
           connectedData.permissionMode &&
@@ -1007,6 +1032,7 @@ export function useSession(
       setMessages,
       setSession,
       fetchNewMessages,
+      schedulePersistedCatchUp,
       session?.provider,
     ],
   );

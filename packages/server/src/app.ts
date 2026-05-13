@@ -360,6 +360,7 @@ export function createApp(options: AppOptions): AppResult {
       project.id,
       {
         readerFactory,
+        sessionIndexService: options.sessionIndexService,
         codexSessionsDir: CODEX_SESSIONS_DIR,
         codexReaderFactory,
         geminiSessionsDir: GEMINI_TMP_DIR,
@@ -546,6 +547,7 @@ export function createApp(options: AppOptions): AppResult {
       externalTracker,
       notificationService: options.notificationService,
       sessionMetadataService: options.sessionMetadataService,
+      sessionIndexService: options.sessionIndexService,
       eventBus: options.eventBus,
       codexScanner,
       codexSessionsDir: CODEX_SESSIONS_DIR,

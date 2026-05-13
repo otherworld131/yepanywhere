@@ -65,6 +65,11 @@ interface GeminiSessionCacheEntry {
   size: number;
 }
 
+interface LoadedGeminiSessionData {
+  sessionFile: GeminiSessionFile;
+  summary: SessionSummary;
+}
+
 /**
  * Gemini-specific session reader for Gemini CLI JSON files.
  *
@@ -126,40 +131,8 @@ export class GeminiSessionReader implements ISessionReader {
     sessionId: string,
     projectId: UrlProjectId,
   ): Promise<SessionSummary | null> {
-    const sessionCache = await this.findSessionFile(sessionId);
-    if (!sessionCache) return null;
-
-    try {
-      const content = await readFile(sessionCache.filePath, "utf-8");
-      const session = parseGeminiSessionFile(content);
-
-      if (!session || session.messages.length === 0) return null;
-
-      const stats = await stat(sessionCache.filePath);
-      const { title, fullTitle } = this.extractTitle(session.messages);
-      const messageCount = session.messages.length;
-      const model = this.extractModel(session.messages);
-      const contextUsage = this.extractContextUsage(session.messages, model);
-
-      // Skip sessions with no actual conversation messages
-      if (messageCount === 0) return null;
-
-      return {
-        id: sessionId,
-        projectId,
-        title,
-        fullTitle,
-        createdAt: session.startTime,
-        updatedAt: session.lastUpdated ?? stats.mtime.toISOString(),
-        messageCount,
-        ownership: { owner: "none" },
-        contextUsage,
-        provider: "gemini",
-        model,
-      };
-    } catch {
-      return null;
-    }
+    const loaded = await this.loadSessionData(sessionId, projectId);
+    return loaded?.summary ?? null;
   }
 
   async getSession(
@@ -168,15 +141,10 @@ export class GeminiSessionReader implements ISessionReader {
     afterMessageId?: string,
     _options?: GetSessionOptions,
   ): Promise<LoadedSession | null> {
-    const summary = await this.getSessionSummary(sessionId, projectId);
-    if (!summary) return null;
+    const loaded = await this.loadSessionData(sessionId, projectId);
+    if (!loaded) return null;
 
-    const sessionCache = await this.findSessionFile(sessionId);
-    if (!sessionCache) return null;
-
-    const content = await readFile(sessionCache.filePath, "utf-8");
-    const sessionFile = parseGeminiSessionFile(content);
-    if (!sessionFile) return null;
+    const { summary, sessionFile } = loaded;
 
     // Filter messages for incremental fetching if needed
     // For Gemini, messages have 'id' which we map to 'uuid'
@@ -225,6 +193,50 @@ export class GeminiSessionReader implements ISessionReader {
       if (!summary) return null;
 
       return { summary, mtime, size };
+    } catch {
+      return null;
+    }
+  }
+
+  private async loadSessionData(
+    sessionId: string,
+    projectId: UrlProjectId,
+  ): Promise<LoadedGeminiSessionData | null> {
+    const sessionCache = await this.findSessionFile(sessionId);
+    if (!sessionCache) return null;
+
+    try {
+      const content = await readFile(sessionCache.filePath, "utf-8");
+      const sessionFile = parseGeminiSessionFile(content);
+
+      if (!sessionFile || sessionFile.messages.length === 0) return null;
+
+      const stats = await stat(sessionCache.filePath);
+      const { title, fullTitle } = this.extractTitle(sessionFile.messages);
+      const messageCount = sessionFile.messages.length;
+      const model = this.extractModel(sessionFile.messages);
+      const contextUsage = this.extractContextUsage(
+        sessionFile.messages,
+        model,
+      );
+
+      if (messageCount === 0) return null;
+
+      const summary: SessionSummary = {
+        id: sessionId,
+        projectId,
+        title,
+        fullTitle,
+        createdAt: sessionFile.startTime,
+        updatedAt: sessionFile.lastUpdated ?? stats.mtime.toISOString(),
+        messageCount,
+        ownership: { owner: "none" },
+        contextUsage,
+        provider: "gemini",
+        model,
+      };
+
+      return { sessionFile, summary };
     } catch {
       return null;
     }

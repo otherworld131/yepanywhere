@@ -72,6 +72,12 @@ export interface AgentMapping {
   agentType?: string;
 }
 
+interface LoadedClaudeSessionData {
+  filePath: string;
+  rawMessages: ClaudeSessionEntry[];
+  summary: SessionSummary;
+}
+
 type UsageFields = {
   input_tokens?: number;
   cache_read_input_tokens?: number;
@@ -218,22 +224,15 @@ export class ClaudeSessionReader implements ISessionReader {
     sessionId: string,
     projectId: UrlProjectId,
   ): Promise<SessionSummary | null> {
-    for (const dir of this.allSessionDirs) {
-      const result = await this.getSessionSummaryFromDir(
-        dir,
-        sessionId,
-        projectId,
-      );
-      if (result) return result;
-    }
-    return null;
+    const loaded = await this.loadSessionData(sessionId, projectId);
+    return loaded?.summary ?? null;
   }
 
-  private async getSessionSummaryFromDir(
+  private async loadSessionDataFromDir(
     dir: string,
     sessionId: string,
     projectId: UrlProjectId,
-  ): Promise<SessionSummary | null> {
+  ): Promise<LoadedClaudeSessionData | null> {
     const filePath = join(dir, `${sessionId}.jsonl`);
 
     try {
@@ -289,7 +288,7 @@ export class ClaudeSessionReader implements ISessionReader {
         provider,
       );
 
-      return {
+      const summary: SessionSummary = {
         id: sessionId,
         projectId,
         title: this.extractTitle(firstUserMessage),
@@ -302,9 +301,26 @@ export class ClaudeSessionReader implements ISessionReader {
         provider,
         model,
       };
+
+      return {
+        filePath,
+        rawMessages: messages,
+        summary,
+      };
     } catch {
       return null;
     }
+  }
+
+  private async loadSessionData(
+    sessionId: string,
+    projectId: UrlProjectId,
+  ): Promise<LoadedClaudeSessionData | null> {
+    for (const dir of this.allSessionDirs) {
+      const result = await this.loadSessionDataFromDir(dir, sessionId, projectId);
+      if (result) return result;
+    }
+    return null;
   }
 
   async getSession(
@@ -313,23 +329,10 @@ export class ClaudeSessionReader implements ISessionReader {
     afterMessageId?: string,
     _options?: GetSessionOptions,
   ): Promise<LoadedSession | null> {
-    const summary = await this.getSessionSummary(sessionId, projectId);
-    if (!summary) return null;
+    const loaded = await this.loadSessionData(sessionId, projectId);
+    if (!loaded) return null;
 
-    // Find the session file across all dirs
-    const filePath = await this.findSessionFile(sessionId);
-    if (!filePath) return null;
-    const content = await readFile(filePath, "utf-8");
-    const lines = content.trim().split("\n");
-
-    const rawMessages: ClaudeSessionEntry[] = [];
-    for (const line of lines) {
-      try {
-        rawMessages.push(JSON.parse(line) as ClaudeSessionEntry);
-      } catch {
-        // Skip malformed lines
-      }
-    }
+    const { summary, rawMessages } = loaded;
 
     // Filter messages for incremental fetching if needed
     // Note: Raw messages might not have UUIDs if they are old format or haven't been normalized.

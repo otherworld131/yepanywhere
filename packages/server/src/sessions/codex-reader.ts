@@ -67,6 +67,11 @@ interface CodexSessionFile {
   isSubagent: boolean;
 }
 
+interface LoadedCodexSessionData {
+  entries: CodexSessionEntry[];
+  summary: SessionSummary;
+}
+
 const CODEX_META_READ_MAX_BYTES = 1024 * 1024;
 
 /**
@@ -128,70 +133,8 @@ export class CodexSessionReader implements ISessionReader {
     sessionId: string,
     projectId: UrlProjectId,
   ): Promise<SessionSummary | null> {
-    const sessionFile = await this.findSessionFile(sessionId);
-    if (!sessionFile) return null;
-
-    try {
-      const lines = await readJsonlLines(sessionFile.filePath);
-      if (lines.length === 0 || (lines.length === 1 && !lines[0])) return null;
-      const entries: CodexSessionEntry[] = [];
-
-      for (const line of lines) {
-        const entry = parseCodexSessionEntry(line);
-        if (entry) {
-          entries.push(entry);
-        }
-      }
-
-      if (entries.length === 0) return null;
-
-      // Extract session metadata from first entry
-      const metaEntry = entries.find((e) => e.type === "session_meta") as
-        | CodexSessionMetaEntry
-        | undefined;
-      if (!metaEntry) return null;
-
-      const stats = await stat(sessionFile.filePath);
-      const { title, fullTitle } = this.extractTitle(entries);
-      const messageCount = this.countMessages(entries);
-      const model = this.extractModel(entries);
-      const provider = this.determineProvider(metaEntry, model);
-      const turnContext = this.extractTurnContext(entries);
-      const contextUsage = this.extractContextUsage(entries, model, provider);
-
-      // Skip sessions with no actual conversation messages
-      if (messageCount === 0) return null;
-
-      return {
-        id: sessionId,
-        projectId,
-        title,
-        fullTitle,
-        createdAt: metaEntry.payload.timestamp,
-        updatedAt: stats.mtime.toISOString(),
-        messageCount,
-        ownership: { owner: "none" },
-        contextUsage,
-        provider,
-        model,
-        originator: metaEntry.payload.originator,
-        cliVersion: metaEntry.payload.cli_version,
-        source: metaEntry.payload.source,
-        approvalPolicy: turnContext?.payload.approval_policy,
-        sandboxPolicy: turnContext?.payload.sandbox_policy
-          ? {
-              type: turnContext.payload.sandbox_policy.type,
-              networkAccess: turnContext.payload.sandbox_policy.network_access,
-              excludeTmpdirEnvVar:
-                turnContext.payload.sandbox_policy.exclude_tmpdir_env_var,
-              excludeSlashTmp:
-                turnContext.payload.sandbox_policy.exclude_slash_tmp,
-            }
-          : undefined,
-      };
-    } catch {
-      return null;
-    }
+    const loaded = await this.loadSessionData(sessionId, projectId);
+    return loaded?.summary ?? null;
   }
 
   async getSession(
@@ -200,21 +143,10 @@ export class CodexSessionReader implements ISessionReader {
     afterMessageId?: string,
     _options?: GetSessionOptions,
   ): Promise<LoadedSession | null> {
-    const summary = await this.getSessionSummary(sessionId, projectId);
-    if (!summary) return null;
+    const loaded = await this.loadSessionData(sessionId, projectId);
+    if (!loaded) return null;
 
-    const sessionFile = await this.findSessionFile(sessionId);
-    if (!sessionFile) return null;
-
-    const lines = await readJsonlLines(sessionFile.filePath);
-
-    const entries: CodexSessionEntry[] = [];
-    for (const line of lines) {
-      const entry = parseCodexSessionEntry(line);
-      if (entry) {
-        entries.push(entry);
-      }
-    }
+    const { summary, entries } = loaded;
 
     // Filter entries if needed (for incremental fetching)
     // Note: Codex entries are not 1:1 with messages, so standard ID filtering is tricky
@@ -426,6 +358,76 @@ export class CodexSessionReader implements ISessionReader {
       typeof subagentSource.subagent?.thread_spawn?.parent_thread_id ===
       "string"
     );
+  }
+
+  private async loadSessionData(
+    sessionId: string,
+    projectId: UrlProjectId,
+  ): Promise<LoadedCodexSessionData | null> {
+    const sessionFile = await this.findSessionFile(sessionId);
+    if (!sessionFile) return null;
+
+    try {
+      const lines = await readJsonlLines(sessionFile.filePath);
+      if (lines.length === 0 || (lines.length === 1 && !lines[0])) return null;
+      const entries: CodexSessionEntry[] = [];
+
+      for (const line of lines) {
+        const entry = parseCodexSessionEntry(line);
+        if (entry) {
+          entries.push(entry);
+        }
+      }
+
+      if (entries.length === 0) return null;
+
+      const metaEntry = entries.find((e) => e.type === "session_meta") as
+        | CodexSessionMetaEntry
+        | undefined;
+      if (!metaEntry) return null;
+
+      const stats = await stat(sessionFile.filePath);
+      const { title, fullTitle } = this.extractTitle(entries);
+      const messageCount = this.countMessages(entries);
+      const model = this.extractModel(entries);
+      const provider = this.determineProvider(metaEntry, model);
+      const turnContext = this.extractTurnContext(entries);
+      const contextUsage = this.extractContextUsage(entries, model, provider);
+
+      if (messageCount === 0) return null;
+
+      const summary: SessionSummary = {
+        id: sessionId,
+        projectId,
+        title,
+        fullTitle,
+        createdAt: metaEntry.payload.timestamp,
+        updatedAt: stats.mtime.toISOString(),
+        messageCount,
+        ownership: { owner: "none" },
+        contextUsage,
+        provider,
+        model,
+        originator: metaEntry.payload.originator,
+        cliVersion: metaEntry.payload.cli_version,
+        source: metaEntry.payload.source,
+        approvalPolicy: turnContext?.payload.approval_policy,
+        sandboxPolicy: turnContext?.payload.sandbox_policy
+          ? {
+              type: turnContext.payload.sandbox_policy.type,
+              networkAccess: turnContext.payload.sandbox_policy.network_access,
+              excludeTmpdirEnvVar:
+                turnContext.payload.sandbox_policy.exclude_tmpdir_env_var,
+              excludeSlashTmp:
+                turnContext.payload.sandbox_policy.exclude_slash_tmp,
+            }
+          : undefined,
+      };
+
+      return { entries, summary };
+    } catch {
+      return null;
+    }
   }
 
   /**

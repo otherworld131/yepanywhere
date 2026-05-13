@@ -11,6 +11,7 @@ import {
   thinkingOptionToConfig,
 } from "@yep-anywhere/shared";
 import { Hono } from "hono";
+import type { ISessionIndexService } from "../indexes/types.js";
 import { augmentTextBlocks } from "../augments/markdown-augments.js";
 import type { SessionMetadataService } from "../metadata/index.js";
 import type { NotificationService } from "../notifications/index.js";
@@ -95,6 +96,10 @@ function isCodexProviderName(
   return provider === "codex" || provider === "codex-oss";
 }
 
+function getSessionMessageId(message: Message): string | undefined {
+  return message.uuid ?? message.id;
+}
+
 export interface SessionsDeps {
   supervisor: Supervisor;
   scanner: ProjectScanner;
@@ -102,6 +107,7 @@ export interface SessionsDeps {
   externalTracker?: ExternalSessionTracker;
   notificationService?: NotificationService;
   sessionMetadataService?: SessionMetadataService;
+  sessionIndexService?: ISessionIndexService;
   eventBus?: EventBus;
   codexScanner?: CodexSessionScanner;
   codexSessionsDir?: string;
@@ -464,6 +470,7 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       projectId as UrlProjectId,
       {
         readerFactory: deps.readerFactory,
+        sessionIndexService: deps.sessionIndexService,
         codexSessionsDir: deps.codexSessionsDir,
         codexReaderFactory: deps.codexReaderFactory,
         geminiSessionsDir: deps.geminiSessionsDir,
@@ -712,6 +719,18 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
         });
       }
       return c.json({ error: "Session not found" }, 404);
+    }
+
+    if (afterMessageId) {
+      const afterIndex = session.messages.findIndex(
+        (message) => getSessionMessageId(message) === afterMessageId,
+      );
+      if (afterIndex !== -1) {
+        session = {
+          ...session,
+          messages: session.messages.slice(afterIndex + 1),
+        };
+      }
     }
 
     // Get session metadata (custom title, archived, starred)
@@ -1090,10 +1109,11 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
         sessionId,
         projectId as UrlProjectId,
         {
-          readerFactory: deps.readerFactory,
-          codexSessionsDir: deps.codexSessionsDir,
-          codexReaderFactory: deps.codexReaderFactory,
-          geminiSessionsDir: deps.geminiSessionsDir,
+        readerFactory: deps.readerFactory,
+        sessionIndexService: deps.sessionIndexService,
+        codexSessionsDir: deps.codexSessionsDir,
+        codexReaderFactory: deps.codexReaderFactory,
+        geminiSessionsDir: deps.geminiSessionsDir,
           geminiReaderFactory: deps.geminiReaderFactory,
           geminiHashToCwd: deps.geminiScanner?.getHashToCwd(),
         },
